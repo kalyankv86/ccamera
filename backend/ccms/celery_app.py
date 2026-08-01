@@ -36,6 +36,14 @@ celery_app.conf.beat_schedule = {
         "task": "ccms.watchdog.heartbeat.beat",
         "schedule": 60.0,
     },
+    "check-escalations": {
+        "task": "ccms.alerts.escalation.check_escalations",
+        "schedule": 60.0,
+    },
+    "flapping-and-disk-forecast": {
+        "task": "ccms.evaluator.flapping.check_flapping_and_disk_forecast",
+        "schedule": 300.0,
+    },
 }
 
 celery_app.conf.task_default_queue = "celery"
@@ -46,7 +54,9 @@ celery_app.conf.timezone = "UTC"
 # scheduler/dispatch.py and watchdog/heartbeat.py. Every task module below uses
 # @celery_app.task (not @shared_task) so tasks always bind to this app
 # regardless of import order in scripts, tests, or transitive imports.
+from ccms.alerts import escalation as _alerts_escalation  # noqa: F401,E402
 from ccms.checkers import tasks as _checkers_tasks  # noqa: F401,E402
+from ccms.evaluator import flapping as _evaluator_flapping  # noqa: F401,E402
 from ccms.notifications import dispatcher as _notifications_dispatcher  # noqa: F401,E402
 from ccms.reports import tasks as _reports_tasks  # noqa: F401,E402
 from ccms.scheduler import dispatch as _scheduler_dispatch  # noqa: F401,E402

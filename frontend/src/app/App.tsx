@@ -6,6 +6,8 @@ import { Summary } from "../pages/Summary";
 import { DevicesList } from "../pages/DevicesList";
 import { DeviceDetail } from "../pages/DeviceDetail";
 import { Alerts } from "../pages/Alerts";
+import { Reports } from "../pages/Reports";
+import { Admin } from "../pages/Admin";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = useAuth((s) => s.token);
@@ -30,6 +32,8 @@ export function App() {
         <Route path="devices" element={<DevicesList />} />
         <Route path="devices/:id" element={<DeviceDetail />} />
         <Route path="alerts" element={<Alerts />} />
+        <Route path="reports" element={<Reports />} />
+        <Route path="admin" element={<Admin />} />
         <Route path="*" element={<Navigate to="/summary" replace />} />
       </Route>
     </Routes>

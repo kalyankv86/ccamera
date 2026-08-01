@@ -12,3 +12,4 @@ data/snapshots/
 simulator/*.egg-info/
 auto.crt
 auto.key
+backend/celerybeat-schedule*

@@ -1,8 +1,7 @@
-"""NFR-12 retention rollup (implemented now) + FR-10 scheduled monthly report
-(full PDF/Excel rendering lands in M9 - reports/uptime.py, reports/pdf.py,
-reports/excel.py). Both are registered in celery_app.beat_schedule so they must
-exist and be safe no-ops until M9 fleshes generate_monthly_report out."""
+"""NFR-12 retention rollup + FR-10 scheduled monthly uptime/SLA report,
+emailed to management on the 1st of each month for the prior month."""
 
+import calendar
 import logging
 from datetime import date, datetime, timedelta, timezone
 
@@ -11,8 +10,16 @@ from sqlalchemy import func
 from ccms.celery_app import celery_app
 from ccms.db import SessionLocal
 from ccms.models.check_result import CheckResult, CheckResultDaily
+from ccms.models.enums import Role
+from ccms.models.settings import Setting
+from ccms.models.user import User
+from ccms.notifications.email_adapter import EmailAdapter
+from ccms.reports.excel import render_uptime_xlsx
+from ccms.reports.pdf import render_uptime_pdf
+from ccms.reports.uptime import compute_fleet_uptime
 
 logger = logging.getLogger(__name__)
+REPORT_RECIPIENTS_KEY = "monthly_report_recipients"
 
 RAW_RETENTION_DAYS = 90
 DAILY_RETENTION_DAYS = 365 * 3
@@ -66,6 +73,46 @@ def rollup_and_retire() -> None:
 
 @celery_app.task(name="ccms.reports.tasks.generate_monthly_report")
 def generate_monthly_report() -> None:
-    """FR-10: scheduled monthly SLA report emailed to management. Full
-    implementation (reports/uptime.py + pdf.py/excel.py + email) lands in M9."""
-    logger.info("generate_monthly_report: not yet implemented (M9)")
+    """FR-10: scheduled monthly SLA report, PDF+Excel attached, emailed to
+    management for the previous calendar month. Recipients: the `settings`
+    row at REPORT_RECIPIENTS_KEY (list[str]) if set, else all active Admins."""
+    db = SessionLocal()
+    try:
+        today = date.today()
+        last_day_prev_month = today.replace(day=1) - timedelta(days=1)
+        period_start = datetime(
+            last_day_prev_month.year, last_day_prev_month.month, 1, tzinfo=timezone.utc
+        )
+        days_in_month = calendar.monthrange(last_day_prev_month.year, last_day_prev_month.month)[1]
+        period_end = period_start + timedelta(days=days_in_month)
+
+        rows = compute_fleet_uptime(db, period_start, period_end)
+        if not rows:
+            logger.info("generate_monthly_report: no active devices, skipping")
+            return
+
+        pdf_bytes = render_uptime_pdf(rows, period_start, period_end)
+        xlsx_bytes = render_uptime_xlsx(rows)
+
+        recipients_setting = db.get(Setting, REPORT_RECIPIENTS_KEY)
+        recipients = recipients_setting.value_jsonb if recipients_setting else None
+        if not recipients:
+            recipients = [u.email for u in db.query(User).filter(User.role == Role.ADMIN, User.active.is_(True))]
+
+        subject = f"[CCMS] Monthly Uptime/SLA Report - {period_start:%B %Y}"
+        body = (
+            f"Attached: uptime/SLA report for {period_start:%B %Y} covering {len(rows)} device(s).\n"
+            f"Fleet average uptime: {sum(r.uptime_pct for r in rows) / len(rows):.2f}%"
+        )
+        adapter = EmailAdapter()
+        for recipient in recipients:
+            adapter.send(
+                message=body, recipient=recipient, subject=subject,
+                attachments=[
+                    (f"ccms_uptime_{period_start:%Y%m}.pdf", pdf_bytes, "pdf"),
+                    (f"ccms_uptime_{period_start:%Y%m}.xlsx", xlsx_bytes, "vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+                ],
+            )
+        logger.info("generate_monthly_report: sent to %d recipient(s)", len(recipients))
+    finally:
+        db.close()

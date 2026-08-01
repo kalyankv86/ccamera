@@ -21,6 +21,14 @@ export function Layout() {
           <NavLink to="/alerts" className={({ isActive }) => (isActive ? "active" : undefined)}>
             Alerts
           </NavLink>
+          <NavLink to="/reports" className={({ isActive }) => (isActive ? "active" : undefined)}>
+            Reports
+          </NavLink>
+          {user?.role === "admin" && (
+            <NavLink to="/admin" className={({ isActive }) => (isActive ? "active" : undefined)}>
+              Admin
+            </NavLink>
+          )}
         </nav>
         <div className="ws-status">
           <div style={{ marginBottom: 6 }}>

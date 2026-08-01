@@ -17,9 +17,14 @@ HEARTBEAT_KEY = "watchdog.last_heartbeat_at"
 def beat() -> None:
     db = SessionLocal()
     try:
-        now = datetime.now(timezone.utc).isoformat()
-        stmt = pg_insert(Setting).values(key=HEARTBEAT_KEY, value_jsonb={"at": now})
-        stmt = stmt.on_conflict_do_update(index_elements=[Setting.key], set_={"value_jsonb": {"at": now}})
+        now = datetime.now(timezone.utc)
+        stmt = pg_insert(Setting).values(key=HEARTBEAT_KEY, value_jsonb={"at": now.isoformat()}, updated_at=now)
+        # set_= is an explicit column list for ON CONFLICT DO UPDATE - it does
+        # not inherit the column's onupdate=func.now(), which only fires for
+        # ORM-level updates, so updated_at must be listed here too.
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[Setting.key], set_={"value_jsonb": {"at": now.isoformat()}, "updated_at": now}
+        )
         db.execute(stmt)
         db.commit()
     finally:
