@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Provisions CCMS on a fresh Ubuntu server (tested against 24.04 LTS "noble").
+# Provisions CCMS on a fresh Ubuntu server. Targets 24.04 LTS "noble" but
+# also handles 22.04/20.04 by pulling Python 3.12 from deadsnakes when it's
+# not in the default repos.
 # Run as a user with sudo, from inside a checked-out copy of this repo:
 #   git clone https://github.com/kalyankv86/ccamera.git && cd ccamera
 #   ./scripts/deploy_ubuntu.sh
@@ -32,6 +34,17 @@ read -rp "Run certbot for a real TLS certificate now? [y/N]: " RUN_CERTBOT
 
 echo "==> Installing system packages"
 sudo apt-get update -y
+
+# Ubuntu 24.04 "noble" ships python3.12 in the default repos; older releases
+# (22.04 "jammy", 20.04 "focal") don't, so pull it from the deadsnakes PPA
+# instead of failing outright.
+if ! apt-cache show python3.12 >/dev/null 2>&1; then
+  echo "==> python3.12 not in default repos - adding deadsnakes PPA"
+  sudo apt-get install -y software-properties-common
+  sudo add-apt-repository -y ppa:deadsnakes/ppa
+  sudo apt-get update -y
+fi
+
 sudo apt-get install -y \
   python3.12 python3.12-venv python3-pip \
   postgresql postgresql-contrib \
