@@ -41,19 +41,26 @@ if [ -z "$RUN_CERTBOT" ]; then
 fi
 
 echo "==> Installing system packages"
-sudo apt-get update -y
+# DEBIAN_FRONTEND=noninteractive must be passed as part of the sudo command
+# itself (sudo VAR=val cmd), not just exported in this shell - sudo's default
+# env_reset policy strips inherited env vars unless they're set this way or
+# via sudo -E. Without this, packages with a postinst debconf question (e.g.
+# msmtp's AppArmor prompt) fall back to a Readline prompt with no TTY behind
+# it and hang forever - confirmed the hard way on a real run.
+export DEBIAN_FRONTEND=noninteractive
+sudo DEBIAN_FRONTEND=noninteractive apt-get update -y
 
 # Ubuntu 24.04 "noble" ships python3.12 in the default repos; older releases
 # (22.04 "jammy", 20.04 "focal") don't, so pull it from the deadsnakes PPA
 # instead of failing outright.
 if ! apt-cache show python3.12 >/dev/null 2>&1; then
   echo "==> python3.12 not in default repos - adding deadsnakes PPA"
-  sudo apt-get install -y software-properties-common
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y software-properties-common
   sudo add-apt-repository -y ppa:deadsnakes/ppa
-  sudo apt-get update -y
+  sudo DEBIAN_FRONTEND=noninteractive apt-get update -y
 fi
 
-sudo apt-get install -y \
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
   python3.12 python3.12-venv python3-pip \
   postgresql postgresql-contrib \
   redis-server \
@@ -67,7 +74,7 @@ sudo apt-get install -y \
 if ! command -v node >/dev/null 2>&1; then
   echo "==> Installing Node.js 20.x (NodeSource)"
   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-  sudo apt-get install -y nodejs
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs
 fi
 
 echo "==> Creating service user '$SERVICE_USER'"
