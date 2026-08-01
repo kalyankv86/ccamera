@@ -1,18 +1,26 @@
 import csv
 import io
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from ccms.api.deps import client_ip, get_current_user, get_db
+from ccms.api.deps import client_ip, get_current_user, get_current_user_flexible, get_db
 from ccms.audit.logger import record_audit
 from ccms.auth.crypto import encrypt_secret
 from ccms.auth.rbac import require_role
+from ccms.models.check_result import CheckResult
 from ccms.models.device import Credential, Device
-from ccms.models.enums import Role
+from ccms.models.enums import DeviceState, Role
+from ccms.models.status_event import StatusEvent
+from ccms.schemas.alert import DeviceCheckResultOut, DeviceHistory, DeviceHistoryEvent
 from ccms.schemas.device import DeviceCreate, DeviceOut, DeviceUpdate
 
 router = APIRouter()
+
+_SNAPSHOT_DIR = Path(__file__).resolve().parents[4] / "data" / "snapshots"
 
 
 def _apply_credentials(db: Session, device: Device, username: str | None, password: str | None) -> None:
@@ -148,3 +156,65 @@ async def bulk_import(
         db, user=current_user, action="device.bulk_import", detail={"count": len(created)}, ip=client_ip(request),
     )
     return created
+
+
+@router.get("/{device_id}/history", response_model=DeviceHistory)
+def device_history(
+    device_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)
+) -> DeviceHistory:
+    device = db.get(Device, device_id)
+    if not device:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Device not found")
+
+    events = (
+        db.query(StatusEvent)
+        .filter(StatusEvent.device_id == device_id)
+        .order_by(StatusEvent.started_at.desc())
+        .limit(100)
+        .all()
+    )
+    checks = (
+        db.query(CheckResult)
+        .filter(CheckResult.device_id == device_id)
+        .order_by(CheckResult.time.desc())
+        .limit(200)
+        .all()
+    )
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    downtime = (
+        db.query(StatusEvent)
+        .filter(
+            StatusEvent.device_id == device_id,
+            StatusEvent.new_state == DeviceState.DOWN,
+            StatusEvent.started_at >= cutoff,
+            StatusEvent.suppressed_by_parent.is_(False),
+        )
+        .all()
+    )
+    now = datetime.now(timezone.utc)
+    downtime_seconds = sum(
+        (e.downtime_seconds if e.downtime_seconds is not None else int((now - e.started_at).total_seconds()))
+        for e in downtime
+    )
+    uptime_pct = max(0.0, 100.0 - (downtime_seconds / (24 * 3600)) * 100.0)
+
+    return DeviceHistory(
+        status_events=[DeviceHistoryEvent.model_validate(e) for e in events],
+        recent_checks=[DeviceCheckResultOut.model_validate(c) for c in checks],
+        uptime_pct_24h=round(uptime_pct, 2),
+    )
+
+
+@router.get("/{device_id}/snapshot")
+def device_snapshot(device_id: int, current_user=Depends(get_current_user_flexible)) -> FileResponse:
+    """FR-09/SDD 5: latest captured frame (written by ImageChecker, FR-04).
+    Officer+ per SDD 5. Uses get_current_user_flexible (header or ?token=)
+    because the dashboard loads this via a plain <img> tag, which can't
+    attach an Authorization header."""
+    if current_user.role not in (Role.SECURITY_OFFICER, Role.ADMIN):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Insufficient role")
+    path = _SNAPSHOT_DIR / f"device_{device_id}_latest.jpg"
+    if not path.exists():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="No snapshot available for this device yet")
+    return FileResponse(path, media_type="image/jpeg")

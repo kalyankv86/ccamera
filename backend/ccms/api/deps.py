@@ -22,5 +22,15 @@ def get_current_user(token: str | None = Depends(oauth2_scheme), db: Session = D
     return user
 
 
+def get_current_user_flexible(
+    request: Request, token: str | None = Depends(oauth2_scheme), db: Session = Depends(get_db)
+) -> User:
+    """Same as get_current_user, but also accepts ?token=... - for the handful
+    of endpoints a browser loads via a plain tag (e.g. <img src=snapshot>)
+    rather than fetch(), which can't attach an Authorization header."""
+    query_token = request.query_params.get("token")
+    return get_current_user(token or query_token, db)
+
+
 def client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"

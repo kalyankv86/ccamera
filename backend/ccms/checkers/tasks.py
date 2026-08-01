@@ -17,6 +17,7 @@ from ccms.db import SessionLocal
 from ccms.evaluator.service import evaluate
 from ccms.models.check_result import CheckResult
 from ccms.models.device import Device
+from ccms.realtime import publish_status_change
 
 _CHECKERS = {
     "ping": PingChecker(),
@@ -77,6 +78,9 @@ def _run_and_record(device_id: int, checker_key: str, maintenance_flag: bool) ->
         db.commit()
 
         if event is not None:
+            publish_status_change(
+                device_id=locked_device.id, old_state=event.old_state.value, new_state=event.new_state.value
+            )
             handle_transition(db, locked_device, event)
     finally:
         db.close()

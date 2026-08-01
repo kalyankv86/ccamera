@@ -35,6 +35,8 @@ def main() -> None:
             row.onvif_url = f"{SIM_CONTROL_URL}/sim/nvr/{nvr.sim_id}/status"
             row.building = nvr.building
             row.zone = nvr.zone
+            row.lat = nvr.lat
+            row.lng = nvr.lng
             row.criticality = Criticality.HIGH
             row.active = True
             nvr_id_by_sim[nvr.sim_id] = row.id
@@ -52,6 +54,8 @@ def main() -> None:
             row.channel_no = camera.channel_no
             row.building = camera.building
             row.zone = camera.zone
+            row.lat = camera.lat
+            row.lng = camera.lng
             row.criticality = Criticality(camera.criticality)
             row.active = True
 
