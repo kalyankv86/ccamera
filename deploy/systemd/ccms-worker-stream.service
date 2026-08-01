@@ -1,0 +1,19 @@
+[Unit]
+Description=CCMS Celery worker (stream queue: RTSP/image/NVR - limited concurrency)
+After=network.target postgresql.service redis-server.service
+Wants=postgresql.service redis-server.service
+
+[Service]
+Type=simple
+User=ccms
+Group=ccms
+WorkingDirectory=/opt/ccms/backend
+EnvironmentFile=/opt/ccms/.env
+ExecStart=/opt/ccms/backend/.venv/bin/celery -A ccms.celery_app worker -Q stream -c 4 -l info -n stream@localhost
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

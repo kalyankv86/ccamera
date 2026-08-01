@@ -1,0 +1,19 @@
+[Unit]
+Description=CCMS API (FastAPI/Uvicorn)
+After=network.target postgresql.service redis-server.service
+Wants=postgresql.service redis-server.service
+
+[Service]
+Type=simple
+User=ccms
+Group=ccms
+WorkingDirectory=/opt/ccms/backend
+EnvironmentFile=/opt/ccms/.env
+ExecStart=/opt/ccms/backend/.venv/bin/uvicorn ccms.main:app --host 127.0.0.1 --port 8000 --workers 2
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

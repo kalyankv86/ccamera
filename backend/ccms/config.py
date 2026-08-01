@@ -22,6 +22,15 @@ class Settings(BaseSettings):
 
     cred_enc_key: str = "changeme-base64-32-bytes"
 
+    # email_transport=smtp connects directly to smtp_host:smtp_port (Mailpit in
+    # dev). email_transport=msmtp instead pipes the message through the local
+    # `msmtp` binary, which relays using whatever's configured in
+    # /etc/msmtprc - the standard way to send mail from a server that already
+    # has a local MTA/relay set up (see deploy/msmtprc.template).
+    email_transport: str = "smtp"
+    msmtp_binary: str = "msmtp"
+    msmtp_account: str = "default"
+
     smtp_host: str = "localhost"
     smtp_port: int = 1025
     smtp_user: str = ""

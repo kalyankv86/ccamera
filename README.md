@@ -24,6 +24,26 @@ TimescaleDB, no Docker, a device simulator standing in for physical hardware).
 After bootstrap, register the simulator's demo fleet (2 NVRs + 8 cameras):
 `backend/.venv/bin/python scripts/seed_simulated_devices.py`
 
+## Production deployment (Ubuntu Server)
+
+```
+git clone https://github.com/kalyankv86/ccamera.git && cd ccamera
+./scripts/deploy_ubuntu.sh
+```
+
+Provisions Postgres/Redis/Nginx/msmtp, creates a dedicated `ccms` system
+user, builds the frontend, installs systemd units for the API + beat + 3
+Celery worker queues (auto-restart on crash - unlike the dev-mode `honcho`
+setup), and sets up Nginx with a real TLS cert via certbot. Does **not**
+install mediamtx/the simulator - production points at real camera/NVR IPs.
+Safe to re-run for redeploying updated code; it will not regenerate secrets
+or touch an existing `.env`. See `deploy/` for the systemd units, Nginx
+template, and `deploy/msmtprc.template` (fill in your real mail relay after
+the script runs, then `sudo systemctl status ccms-api ccms-beat
+ccms-worker-net ccms-worker-stream ccms-worker-misc` to confirm everything's
+up). This script has not been run against a real Ubuntu box in this repo's
+own development - review it before running against a production system.
+
 ## Layout
 
 - `backend/` - FastAPI + Celery/Redis + PostgreSQL (SQLAlchemy/Alembic)
@@ -51,10 +71,10 @@ monthly email).
   simulator, so it's unverified against a real responder. `Device.channel_no`
   currently means "NVR recording channel" (FR-01); a real switch-port mapping
   for PoE root-cause grouping would need a separate field.
-- **Auto-restart on crash**: `honcho` (the no-Docker process runner) does not
-  restart a crashed process. A production deployment should wrap each
-  Procfile entry in a `launchd`/`systemd` unit, or swap `honcho` for
-  `overmind`.
+- **Auto-restart on crash**: `honcho` (the no-Docker dev process runner) does
+  not restart a crashed process - fine for local dev, not for production.
+  `scripts/deploy_ubuntu.sh` addresses this for real deployments with
+  systemd units (`Restart=on-failure`) instead of honcho.
 - **True network-level (ICMP) DOWN** can't be simulated against `127.0.0.1`
   without `sudo pf` tricks; the simulator's `scope=network` fail mode is
   stream+nvr-down instead, which is what a genuinely dead camera looks like

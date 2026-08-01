@@ -1,0 +1,34 @@
+# Initial HTTP-only site. Run `sudo certbot --nginx -d YOUR_DOMAIN` after
+# this is enabled - certbot rewrites this file in place to add the TLS
+# server block, the 443 listener, and the 80->443 redirect. Don't hand-add
+# ssl_certificate directives yourself first; certbot's --nginx plugin only
+# does its automatic rewrite cleanly on a plain HTTP config like this one.
+#
+# Replace YOUR_DOMAIN below before enabling this site.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name YOUR_DOMAIN;
+
+    root /opt/ccms/frontend/dist;
+    index index.html;
+
+    # REST + WebSocket (/api/v1/status/live) - both live under /api/.
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 3600s;
+    }
+
+    # React Router SPA fallback.
+    location / {
+        try_files $uri /index.html;
+    }
+}

@@ -1,0 +1,27 @@
+# Template for /etc/msmtprc - fill in your actual mail relay and install with:
+#   sudo cp deploy/msmtprc.template /etc/msmtprc
+#   sudo nano /etc/msmtprc                      # fill in host/user/password/from
+#   sudo chown root:ccms /etc/msmtprc
+#   sudo chmod 640 /etc/msmtprc
+# msmtp refuses to run against a config file it considers insecure - it must
+# be owned by root (or the calling user) and not group/world-writable, which
+# `chown root:ccms` + `chmod 640` satisfies for a service running as `ccms`.
+#
+# Test after filling in:
+#   echo -e "Subject: CCMS test\n\nHello from msmtp" | sudo -u ccms msmtp -a default you@example.com
+#   tail -f /var/log/msmtp.log
+
+defaults
+auth           on
+tls            on
+tls_trust_file /etc/ssl/certs/ca-certificates.crt
+logfile        /var/log/msmtp.log
+
+account        default
+host           smtp.YOUR-INSTITUTION.edu
+port           587
+from           ccms@YOUR-INSTITUTION.edu
+user           YOUR_SMTP_USERNAME
+password       YOUR_SMTP_PASSWORD
+
+account default : default
