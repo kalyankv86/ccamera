@@ -13,10 +13,13 @@ from ccms.models.enums import CheckStatus, CheckType
 class PingChecker(BaseChecker):
     """FR-02: ICMP reachability. 3 echo requests, records min/avg latency and loss%.
 
-    Tries icmplib's unprivileged raw-socket mode first (works out of the box on
-    Linux, the SDD's target server OS). macOS denies unprivileged ICMP sockets to
-    non-root processes, so on SocketPermissionError we fall back to shelling out
-    to the system `ping` binary, which is fine for local dev/demo without sudo.
+    Uses icmplib's unprivileged raw-socket mode on Linux (the SDD's target
+    server OS), where it's well-supported via net.ipv4.ping_group_range. On
+    macOS, unprivileged ICMP sockets are both permission-denied *and*, when
+    they are allowed, observed to return unreliable results (a false OK was
+    seen against a guaranteed-unreachable TEST-NET address during dev
+    verification) - so macOS always shells out to the system `ping` binary
+    instead, which was verified to report loss/timeouts correctly.
     """
 
     check_type = CheckType.PING
@@ -24,6 +27,9 @@ class PingChecker(BaseChecker):
     degraded_loss_pct = 50.0
 
     def run(self, device: Device) -> CheckResultData:
+        if platform.system() != "Linux":
+            return self._run_via_subprocess(device)
+
         try:
             host = icmp_ping(device.ip, count=3, timeout=self.timeout_s, privileged=False)
         except SocketPermissionError:

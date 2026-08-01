@@ -42,6 +42,14 @@ class Device(Base):
         SAEnum(DeviceState, name="device_state"), default=DeviceState.UNKNOWN, nullable=False
     )
 
+    # FR-06 debounce counters, persisted (not in-process) so they stay correct
+    # across Celery's multiple prefork worker processes. Row-locked with
+    # SELECT ... FOR UPDATE during evaluation (evaluator/service.py) so
+    # concurrent checks for the same device (e.g. ping + rtsp landing in
+    # different worker processes at once) serialize instead of racing.
+    consecutive_fail_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    consecutive_ok_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
     # Per-check configurable intervals (FR-02/FR-03), seconds
     ping_interval_s: Mapped[int] = mapped_column(Integer, default=60, nullable=False)
     rtsp_interval_s: Mapped[int] = mapped_column(Integer, default=300, nullable=False)

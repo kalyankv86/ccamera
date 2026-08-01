@@ -6,8 +6,7 @@ FAILED SMTP send simply retries via Celery's own retry/backoff mechanism."""
 
 from datetime import datetime, timezone
 
-from celery import shared_task
-
+from ccms.celery_app import celery_app
 from ccms.db import SessionLocal
 from ccms.models.notification import NotificationLog
 from ccms.models.enums import NotificationChannel, NotificationStatus
@@ -24,7 +23,7 @@ _ADAPTERS = {
 MAX_ATTEMPTS = 5
 
 
-@shared_task(
+@celery_app.task(
     name="ccms.notifications.dispatcher.send_notification",
     bind=True,
     max_retries=MAX_ATTEMPTS,

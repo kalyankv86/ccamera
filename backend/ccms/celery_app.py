@@ -41,13 +41,13 @@ celery_app.conf.beat_schedule = {
 celery_app.conf.task_default_queue = "celery"
 celery_app.conf.timezone = "UTC"
 
-# Autodiscover keeps task modules importable without a giant manual include= list.
-celery_app.autodiscover_tasks(
-    [
-        "ccms.checkers",
-        "ccms.scheduler",
-        "ccms.notifications",
-        "ccms.reports",
-        "ccms.watchdog",
-    ]
-)
+# Explicit imports rather than autodiscover_tasks(): autodiscover only finds
+# modules literally named "tasks.py" per package, which misses
+# scheduler/dispatch.py and watchdog/heartbeat.py. Every task module below uses
+# @celery_app.task (not @shared_task) so tasks always bind to this app
+# regardless of import order in scripts, tests, or transitive imports.
+from ccms.checkers import tasks as _checkers_tasks  # noqa: F401,E402
+from ccms.notifications import dispatcher as _notifications_dispatcher  # noqa: F401,E402
+from ccms.reports import tasks as _reports_tasks  # noqa: F401,E402
+from ccms.scheduler import dispatch as _scheduler_dispatch  # noqa: F401,E402
+from ccms.watchdog import heartbeat as _watchdog_heartbeat  # noqa: F401,E402

@@ -4,16 +4,16 @@ can alert if `last_heartbeat_at` goes stale, which means CCMS itself is down."""
 
 from datetime import datetime, timezone
 
-from celery import shared_task
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from ccms.celery_app import celery_app
 from ccms.db import SessionLocal
 from ccms.models.settings import Setting
 
 HEARTBEAT_KEY = "watchdog.last_heartbeat_at"
 
 
-@shared_task(name="ccms.watchdog.heartbeat.beat")
+@celery_app.task(name="ccms.watchdog.heartbeat.beat")
 def beat() -> None:
     db = SessionLocal()
     try:

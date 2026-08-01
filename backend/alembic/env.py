@@ -16,13 +16,16 @@ config.set_main_option("sqlalchemy.url", settings.database_url)
 target_metadata = Base.metadata
 
 # check_results/check_results_daily are hand-authored in 0002_check_results.py
-# (native RANGE partitioning isn't expressible via autogenerate) - exclude them
-# from the diff entirely so autogenerate never tries to (re)create them.
-_HAND_MANAGED_TABLES = {"check_results", "check_results_daily"}
+# (native RANGE partitioning isn't expressible via autogenerate); their monthly
+# and default partitions (check_results_default, check_results_yYYYY_mMM) are
+# created at runtime by ccms.scheduler.partitions.ensure_partitions, not by
+# migrations. Exclude all of these from the diff so autogenerate never tries
+# to (re)create or drop them.
+_HAND_MANAGED_TABLES = {"check_results", "check_results_daily", "check_results_default"}
 
 
 def include_object(obj, name, type_, reflected, compare_to):
-    if type_ == "table" and name in _HAND_MANAGED_TABLES:
+    if type_ == "table" and (name in _HAND_MANAGED_TABLES or name.startswith("check_results_y")):
         return False
     return True
 

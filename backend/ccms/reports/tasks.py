@@ -6,9 +6,9 @@ exist and be safe no-ops until M9 fleshes generate_monthly_report out."""
 import logging
 from datetime import date, datetime, timedelta, timezone
 
-from celery import shared_task
 from sqlalchemy import func
 
+from ccms.celery_app import celery_app
 from ccms.db import SessionLocal
 from ccms.models.check_result import CheckResult, CheckResultDaily
 
@@ -18,7 +18,7 @@ RAW_RETENTION_DAYS = 90
 DAILY_RETENTION_DAYS = 365 * 3
 
 
-@shared_task(name="ccms.reports.tasks.rollup_and_retire")
+@celery_app.task(name="ccms.reports.tasks.rollup_and_retire")
 def rollup_and_retire() -> None:
     """Aggregates check_results partitions wholly older than 90 days into
     check_results_daily, then drops the raw partition (NFR-12)."""
@@ -64,7 +64,7 @@ def rollup_and_retire() -> None:
         db.close()
 
 
-@shared_task(name="ccms.reports.tasks.generate_monthly_report")
+@celery_app.task(name="ccms.reports.tasks.generate_monthly_report")
 def generate_monthly_report() -> None:
     """FR-10: scheduled monthly SLA report emailed to management. Full
     implementation (reports/uptime.py + pdf.py/excel.py + email) lands in M9."""

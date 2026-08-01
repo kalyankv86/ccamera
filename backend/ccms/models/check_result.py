@@ -17,7 +17,7 @@ from ccms.models.enums import CheckStatus, CheckType
 class CheckResult(Base):
     __tablename__ = "check_results"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     time: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True, nullable=False)
     device_id: Mapped[int] = mapped_column(ForeignKey("devices.id"), nullable=False)
     check_type: Mapped[CheckType] = mapped_column(SAEnum(CheckType, name="check_type"), nullable=False)

@@ -1,7 +1,9 @@
-"""SDD 3.3: runs after each check result is persisted. Maintains per-device
-debounce counters (in-process dict; fine at 300-device scale for one evaluator
-process) and writes status_events on transitions, with downtime computation and
-root-cause suppression when a parent NVR/switch is already DOWN."""
+"""SDD 3.3: runs after each check result is persisted. Debounce counters are
+persisted on the devices row itself (not an in-process dict) so they stay
+correct across Celery's multiple prefork worker processes; the caller
+(checkers/tasks.py) must pass a `device` fetched with SELECT ... FOR UPDATE so
+concurrent checks for the same device (e.g. ping + rtsp landing in different
+worker processes at once) serialize instead of racing on the counters."""
 
 from datetime import datetime, timezone
 
@@ -11,12 +13,6 @@ from ccms.evaluator.state_machine import DebounceCounters, next_state
 from ccms.models.device import Device
 from ccms.models.enums import CheckStatus, DeviceState
 from ccms.models.status_event import StatusEvent
-
-_counters: dict[int, DebounceCounters] = {}
-
-
-def _counters_for(device_id: int) -> DebounceCounters:
-    return _counters.setdefault(device_id, DebounceCounters())
 
 
 def evaluate(db: Session, device: Device, check_status: CheckStatus, *, maintenance_flag: bool, cause: str | None) -> StatusEvent | None:
@@ -28,11 +24,15 @@ def evaluate(db: Session, device: Device, check_status: CheckStatus, *, maintena
 
     if device.current_state == DeviceState.MAINTENANCE:
         device.current_state = DeviceState.UNKNOWN  # re-enter normal evaluation once window ends
-        _counters.pop(device.id, None)
+        device.consecutive_fail_count = 0
+        device.consecutive_ok_count = 0
 
-    counters = _counters_for(device.id)
+    counters = DebounceCounters(
+        consecutive_fail=device.consecutive_fail_count, consecutive_ok=device.consecutive_ok_count
+    )
     new_state, counters = next_state(device.current_state, counters, check_status)
-    _counters[device.id] = counters
+    device.consecutive_fail_count = counters.consecutive_fail
+    device.consecutive_ok_count = counters.consecutive_ok
 
     if new_state == device.current_state:
         return None
