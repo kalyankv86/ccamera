@@ -2,7 +2,8 @@
 # Provisions CCMS on a fresh Ubuntu server. Targets 24.04 LTS "noble" but
 # also handles 22.04/20.04 by pulling Python 3.12 from deadsnakes when it's
 # not in the default repos.
-# Run as a user with sudo, from inside a checked-out copy of this repo:
+# Run as a regular sudo-capable user, or as root (e.g. a bare cloud VM with
+# no other user set up yet) - both work:
 #   git clone https://github.com/kalyankv86/ccamera.git && cd ccamera
 #   ./scripts/deploy_ubuntu.sh
 #
@@ -14,10 +15,12 @@
 # tools for exercising the pipeline without physical cameras. Production
 # points the device registry at real camera/NVR IP addresses instead.
 #
-# You will be prompted for: the domain name (for Nginx + certbot) and
-# whether to run certbot now. Everything else (secrets, DB password) is
-# generated. Idempotent-ish: safe to re-run, but review before doing so on
-# an already-live install (it does not stop running services first).
+# You will be prompted for the domain name (for Nginx + certbot) and whether
+# to run certbot now, unless CCMS_DEPLOY_DOMAIN / CCMS_DEPLOY_RUN_CERTBOT are
+# already set in the environment (for non-interactive/scripted runs).
+# Everything else (secrets, DB password) is generated. Idempotent-ish: safe
+# to re-run, but review before doing so on an already-live install (it does
+# not stop running services first).
 set -euo pipefail
 
 APP_DIR=/opt/ccms
@@ -25,12 +28,17 @@ SERVICE_USER=ccms
 REPO_SOURCE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 if [ "$(id -u)" -eq 0 ]; then
-  echo "Run this as a regular sudo-capable user, not as root directly." >&2
-  exit 1
+  echo "==> Running as root (sudo run by root doesn't prompt, so this works fine)"
 fi
 
-read -rp "Domain name this server will be reachable at (e.g. ccms.yourcampus.edu): " DOMAIN
-read -rp "Run certbot for a real TLS certificate now? [y/N]: " RUN_CERTBOT
+DOMAIN="${CCMS_DEPLOY_DOMAIN:-}"
+if [ -z "$DOMAIN" ]; then
+  read -rp "Domain name this server will be reachable at (e.g. ccms.yourcampus.edu): " DOMAIN
+fi
+RUN_CERTBOT="${CCMS_DEPLOY_RUN_CERTBOT:-}"
+if [ -z "$RUN_CERTBOT" ]; then
+  read -rp "Run certbot for a real TLS certificate now? [y/N]: " RUN_CERTBOT
+fi
 
 echo "==> Installing system packages"
 sudo apt-get update -y
@@ -157,7 +165,7 @@ for svc in ccms-api ccms-beat ccms-worker-net ccms-worker-stream ccms-worker-mis
 done
 
 echo "==> Configuring Nginx"
-sudo sed "s/YOUR_DOMAIN/${DOMAIN}/g" "$APP_DIR/deploy/nginx/ccms.conf.template" | sudo tee /etc/nginx/sites-available/ccms.conf >/dev/null
+sudo bash -c "sed 's/YOUR_DOMAIN/${DOMAIN}/g' '$APP_DIR/deploy/nginx/ccms.conf.template' > /etc/nginx/sites-available/ccms.conf"
 sudo ln -sf /etc/nginx/sites-available/ccms.conf /etc/nginx/sites-enabled/ccms.conf
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
