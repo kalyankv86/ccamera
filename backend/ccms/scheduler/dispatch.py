@@ -13,13 +13,15 @@ from ccms.celery_app import celery_app
 from ccms.db import SessionLocal
 from ccms.evaluator.maintenance import is_device_in_maintenance
 from ccms.models.device import Device
+from ccms.models.enums import DeviceType
 
-# (db column, interval column, task name, max jitter seconds)
+# (db column, interval column, task name, max jitter seconds, applicable device types)
 _CHECK_SPECS = [
-    ("next_ping_check_at", "ping_interval_s", "ccms.checkers.tasks.run_ping_check", 15),
-    ("next_rtsp_check_at", "rtsp_interval_s", "ccms.checkers.tasks.run_rtsp_check", 15),
-    ("next_nvr_check_at", "nvr_interval_s", "ccms.checkers.tasks.run_nvr_check", 15),
-    ("next_image_check_at", "image_interval_s", "ccms.checkers.tasks.run_image_check", 15),
+    ("next_ping_check_at", "ping_interval_s", "ccms.checkers.tasks.run_ping_check", 15,
+     {DeviceType.CAMERA, DeviceType.NVR, DeviceType.SWITCH}),
+    ("next_rtsp_check_at", "rtsp_interval_s", "ccms.checkers.tasks.run_rtsp_check", 15, {DeviceType.CAMERA}),
+    ("next_nvr_check_at", "nvr_interval_s", "ccms.checkers.tasks.run_nvr_check", 15, {DeviceType.NVR}),
+    ("next_image_check_at", "image_interval_s", "ccms.checkers.tasks.run_image_check", 15, {DeviceType.CAMERA}),
 ]
 
 
@@ -32,7 +34,9 @@ def enqueue_due_checks() -> int:
         devices = db.execute(select(Device).where(Device.active.is_(True))).scalars().all()
         for device in devices:
             maintenance = is_device_in_maintenance(db, device)
-            for due_col, interval_col, task_name, max_jitter in _CHECK_SPECS:
+            for due_col, interval_col, task_name, max_jitter, applicable_types in _CHECK_SPECS:
+                if device.type not in applicable_types:
+                    continue
                 due_at = getattr(device, due_col)
                 if due_at is not None and due_at.tzinfo is None:
                     due_at = due_at.replace(tzinfo=timezone.utc)

@@ -5,4 +5,5 @@ worker_stream: bash -c 'cd backend && .venv/bin/celery -A ccms.celery_app worker
 worker_misc:   bash -c 'cd backend && .venv/bin/celery -A ccms.celery_app worker -Q celery,notifications,reports -c 4 -l info -n misc@%h'
 frontend:      bash -c 'cd frontend && npm run dev -- --host'
 mailpit:       mailpit --smtp 127.0.0.1:1025 --listen 127.0.0.1:8025
+mediamtx:      mediamtx simulator/mediamtx.yml
 simulator:     bash -c 'cd simulator && ../backend/.venv/bin/python -m ccms_sim.cli run --count 8'

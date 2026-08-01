@@ -1,0 +1,5 @@
+# Minimal mediamtx config for the CCMS simulator: allow any path to be
+# published/read without pre-declaring each camera (RtspManager pushes to
+# rtsp://127.0.0.1:8554/<sim_id> for whatever sim_id it's given).
+paths:
+  all_others:

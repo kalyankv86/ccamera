@@ -8,3 +8,7 @@ frontend/dist/
 backend/*.log
 *.pid
 .DS_Store
+data/snapshots/
+simulator/*.egg-info/
+auto.crt
+auto.key
