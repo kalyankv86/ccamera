@@ -168,7 +168,13 @@ echo "==> Installing systemd units"
 sudo cp "$APP_DIR"/deploy/systemd/*.service /etc/systemd/system/
 sudo systemctl daemon-reload
 for svc in ccms-api ccms-beat ccms-worker-net ccms-worker-stream ccms-worker-misc; do
-  sudo systemctl enable --now "$svc"
+  sudo systemctl enable "$svc"
+  # restart, not start: `enable --now`/`start` is a no-op on an
+  # already-running unit, which silently leaves a redeploy's new code
+  # unloaded in the running process - confirmed the hard way live, where a
+  # checker fix landed on disk but the already-running Celery worker kept
+  # executing the old buggy version from memory until restarted by hand.
+  sudo systemctl restart "$svc"
 done
 
 echo "==> Configuring Nginx"
