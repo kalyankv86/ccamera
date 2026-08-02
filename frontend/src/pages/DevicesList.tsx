@@ -3,12 +3,14 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { pollingInterval } from "../api/ws";
+import { useAuth } from "../state/auth";
 import { useWsStatus } from "../state/wsStatus";
 import { StateBadge } from "../components/StateBadge";
 import type { Device } from "../api/types";
 
 export function DevicesList() {
   const connected = useWsStatus((s) => s.connected);
+  const user = useAuth((s) => s.user);
   const { data: devices } = useQuery({
     queryKey: ["devices"],
     queryFn: () => api.get<Device[]>("/devices"),
@@ -35,6 +37,9 @@ export function DevicesList() {
     <div>
       <div className="page-header">
         <h2>Devices</h2>
+        {user?.role === "admin" && (
+          <Link to="/devices/new" className="ack-btn">+ Add device</Link>
+        )}
       </div>
 
       <div className="filters">

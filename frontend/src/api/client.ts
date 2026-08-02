@@ -36,11 +36,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+function serialize(body: unknown): BodyInit | undefined {
+  if (body === undefined) return undefined;
+  if (body instanceof FormData) return body;
+  return JSON.stringify(body);
+}
+
 export const api = {
   get: <T>(path: string) => request<T>(path),
-  post: <T>(path: string, body?: unknown) =>
-    request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
-  put: <T>(path: string, body?: unknown) =>
-    request<T>(path, { method: "PUT", body: body ? JSON.stringify(body) : undefined }),
+  post: <T>(path: string, body?: unknown) => request<T>(path, { method: "POST", body: serialize(body) }),
+  put: <T>(path: string, body?: unknown) => request<T>(path, { method: "PUT", body: serialize(body) }),
   del: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };
