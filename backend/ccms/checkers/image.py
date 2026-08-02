@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 
 from ccms.checkers.base import BaseChecker, CheckResultData
+from ccms.checkers.credentials import build_authenticated_rtsp_url
 from ccms.models.device import Device
 from ccms.models.enums import CheckStatus, CheckType
 
@@ -25,7 +26,8 @@ class ImageChecker(BaseChecker):
         if not device.rtsp_url:
             return CheckResultData(check_type=self.check_type, status=CheckStatus.ERROR, error="no rtsp_url configured")
 
-        frame = self._grab_frame(device.rtsp_url)
+        url = build_authenticated_rtsp_url(device.id, device.rtsp_url)
+        frame = self._grab_frame(url)
         if frame is None:
             return CheckResultData(check_type=self.check_type, status=CheckStatus.FAIL, error="capture failed")
 

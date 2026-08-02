@@ -2,6 +2,7 @@ import json
 import subprocess
 
 from ccms.checkers.base import BaseChecker, CheckResultData
+from ccms.checkers.credentials import build_authenticated_rtsp_url
 from ccms.models.device import Device
 from ccms.models.enums import CheckStatus, CheckType
 
@@ -18,15 +19,23 @@ class RtspChecker(BaseChecker):
         if not device.rtsp_url:
             return CheckResultData(check_type=self.check_type, status=CheckStatus.ERROR, error="no rtsp_url configured")
 
+        url = build_authenticated_rtsp_url(device.id, device.rtsp_url)
+
+        # No -timeout flag: on ffmpeg <= 4.4 (confirmed live - Ubuntu 22.04's
+        # apt package), "-timeout" on the RTSP demuxer is deprecated in a way
+        # that implies *listen* (server) mode instead of a client connection
+        # timeout, causing every real request to fail with "Unable to open
+        # RTSP for listening" / "Cannot assign requested address". The
+        # process-level timeout below is protocol-version-agnostic and is
+        # the only bound needed here.
         cmd = [
             "ffprobe",
             "-v", "error",
             "-rtsp_transport", "tcp",
-            "-timeout", str(int(self.timeout_s * 1_000_000)),  # ffprobe wants microseconds
             "-select_streams", "v:0",
             "-show_entries", "stream=codec_name,width,height",
             "-of", "json",
-            device.rtsp_url,
+            url,
         ]
         try:
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=self.timeout_s + 3)
