@@ -38,6 +38,12 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         add_header Cache-Control no-cache always;
+        # mediamtx's HLS server issues its own session redirect
+        # (?cookieCheck=1) with a Location header relative to *its own*
+        # root (e.g. /live_9/...) - it has no idea Nginx is proxying it
+        # under a /live/ prefix, so left alone that redirect 404s here and
+        # falls through to the SPA catch-all. Rewrite it back onto /live/.
+        proxy_redirect ~^/(live_[^/]+/.*)$ /live/$1;
     }
 
     # React Router SPA fallback.

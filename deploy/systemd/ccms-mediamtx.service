@@ -1,6 +1,7 @@
 [Unit]
 Description=CCMS live-view relay (mediamtx: on-demand RTSP -> HLS)
-After=network.target
+After=network.target postgresql.service
+Wants=postgresql.service
 
 [Service]
 Type=simple
@@ -8,6 +9,13 @@ User=ccms
 Group=ccms
 WorkingDirectory=/opt/ccms
 ExecStart=/usr/local/bin/mediamtx /opt/ccms/mediamtx.yml
+# mediamtx only persists path config for the lifetime of the process -
+# nothing survives a restart (and every redeploy copies a fresh
+# mediamtx.yml over the live one, see deploy_ubuntu.sh). Re-registering
+# every active camera's path here means live view keeps working after a
+# service restart OR a full server reboot without a human having to
+# remember to re-run the sync script by hand.
+ExecStartPost=/bin/sh -c 'sleep 3 && /opt/ccms/backend/.venv/bin/python /opt/ccms/scripts/sync_live_view_paths.py'
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true

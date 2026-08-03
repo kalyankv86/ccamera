@@ -21,7 +21,11 @@ webrtc: no
 hls: yes
 hlsAddress: 127.0.0.1:8888
 hlsAlwaysRemux: yes
-hlsVariant: mpegts
+# fmp4, not mpegts: this fleet is a mix of H.264 and H.265/HEVC cameras
+# (confirmed live), and mediamtx's mpegts HLS variant only supports H.264 -
+# every HEVC camera's muxer was being destroyed immediately with "the
+# MPEG-TS variant of HLS supports H264 video only". fmp4 supports both.
+hlsVariant: fmp4
 hlsSegmentCount: 3
 hlsSegmentDuration: 1s
 hlsAllowOrigin: "*"
