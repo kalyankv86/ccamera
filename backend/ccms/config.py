@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     sim_control_url: str = "http://127.0.0.1:9500"
     sim_rtsp_base: str = "rtsp://127.0.0.1:8554"
 
+    # Live view: mediamtx relays a camera's RTSP stream to browser-playable
+    # HLS, on demand (only connects to the camera while someone's watching).
+    mediamtx_api_url: str = "http://127.0.0.1:9997"
+    mediamtx_hls_public_base: str = "/live"
+
     serve_frontend_dist: bool = False
     log_level: str = "INFO"
 

@@ -11,9 +11,11 @@ from ccms.api.deps import client_ip, get_current_user, get_current_user_flexible
 from ccms.audit.logger import record_audit
 from ccms.auth.crypto import encrypt_secret
 from ccms.auth.rbac import require_role
+from ccms.checkers.credentials import build_authenticated_rtsp_url
+from ccms.live import mediamtx_client
 from ccms.models.check_result import CheckResult
 from ccms.models.device import Credential, Device
-from ccms.models.enums import DeviceState, Role
+from ccms.models.enums import DeviceState, DeviceType, Role
 from ccms.models.status_event import StatusEvent
 from ccms.schemas.alert import DeviceCheckResultOut, DeviceHistory, DeviceHistoryEvent
 from ccms.schemas.device import DeviceCreate, DeviceOut, DeviceUpdate
@@ -34,6 +36,17 @@ def _apply_credentials(db: Session, device: Device, username: str | None, passwo
         cred.username = username
     if password is not None:
         cred.secret_encrypted = encrypt_secret(password)
+
+
+def _sync_live_view(device: Device) -> None:
+    """Registers/updates this camera's on-demand HLS relay path in mediamtx
+    (live view, see ccms.live.mediamtx_client) after the device row and its
+    credentials are committed - needs a committed row since credential
+    lookup happens in a separate DB session."""
+    if device.type != DeviceType.CAMERA or not device.rtsp_url or not device.active:
+        return
+    url = build_authenticated_rtsp_url(device.id, device.rtsp_url)
+    mediamtx_client.register_path(device.id, url)
 
 
 @router.get("", response_model=list[DeviceOut])
@@ -68,6 +81,7 @@ def create_device(
     _apply_credentials(db, device, payload.credential_username, payload.credential_password)
     db.commit()
     db.refresh(device)
+    _sync_live_view(device)
     record_audit(
         db, user=current_user, action="device.create", target_type="device", target_id=device.id,
         detail={"name": device.name, "ip": device.ip}, ip=client_ip(request),
@@ -100,6 +114,7 @@ def update_device(
     _apply_credentials(db, device, payload.credential_username, payload.credential_password)
     db.commit()
     db.refresh(device)
+    _sync_live_view(device)
     record_audit(
         db, user=current_user, action="device.update", target_type="device", target_id=device.id,
         detail=data, ip=client_ip(request),
@@ -120,6 +135,7 @@ def deactivate_device(
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Device not found")
     device.active = False
     db.commit()
+    mediamtx_client.remove_path(device.id)
     record_audit(
         db, user=current_user, action="device.deactivate", target_type="device", target_id=device.id,
         ip=client_ip(request),
@@ -152,6 +168,7 @@ async def bulk_import(
     db.commit()
     for device in created:
         db.refresh(device)
+        _sync_live_view(device)
     record_audit(
         db, user=current_user, action="device.bulk_import", detail={"count": len(created)}, ip=client_ip(request),
     )
@@ -218,3 +235,20 @@ def device_snapshot(device_id: int, current_user=Depends(get_current_user_flexib
     if not path.exists():
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="No snapshot available for this device yet")
     return FileResponse(path, media_type="image/jpeg")
+
+
+@router.get("/{device_id}/live")
+def device_live(device_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)) -> dict:
+    """Live view (HLS, relayed on-demand through mediamtx - see ccms.live).
+    Not video recording/playback (explicitly out of Phase-1 scope) - this is
+    a real-time "confirm the camera is actually showing what it should"
+    view, distinct from the periodic /snapshot still image. Viewer+ (same
+    level as the rest of the dashboard) since the stream itself carries no
+    credential material - mediamtx holds the camera's decrypted credentials
+    server-side and the client only ever sees the relayed HLS path."""
+    device = db.get(Device, device_id)
+    if not device or device.type != DeviceType.CAMERA:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Camera not found")
+    if not device.rtsp_url:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="No rtsp_url configured for this camera")
+    return {"hls_url": mediamtx_client.hls_url_for(device_id)}

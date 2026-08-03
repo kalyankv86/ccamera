@@ -1,0 +1,30 @@
+# mediamtx config for CCMS live view (on-demand RTSP -> HLS relay).
+# Paths are added/removed dynamically via the API by the backend
+# (ccms.live.mediamtx_client) as cameras are registered/updated/deactivated -
+# no static camera paths are defined here.
+#
+# Both the API and HLS server bind to localhost only: the API because it has
+# no auth of its own (only the CCMS backend should be able to call it), and
+# HLS because it's reverse-proxied through Nginx under /live/ (deploy/nginx/
+# ccms.conf.template) rather than exposed on its own port/origin.
+
+logLevel: info
+
+api: yes
+apiAddress: 127.0.0.1:9997
+
+rtsp: no
+rtmp: no
+srt: no
+webrtc: no
+
+hls: yes
+hlsAddress: 127.0.0.1:8888
+hlsAlwaysRemux: yes
+hlsVariant: mpegts
+hlsSegmentCount: 3
+hlsSegmentDuration: 1s
+hlsAllowOrigin: "*"
+
+paths:
+  all_others:

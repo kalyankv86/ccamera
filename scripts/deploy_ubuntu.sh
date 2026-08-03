@@ -11,9 +11,13 @@
 # copies the app to /opt/ccms, builds the frontend, runs migrations, installs
 # systemd units for the API/beat/3 workers, and configures Nginx.
 #
-# NOT installed here: mediamtx or the simulator - those are dev/demo-only
-# tools for exercising the pipeline without physical cameras. Production
-# points the device registry at real camera/NVR IP addresses instead.
+# NOT installed here: the device simulator - that's a dev/demo-only tool for
+# exercising the pipeline without physical cameras. mediamtx IS installed in
+# production, for a different reason than the simulator uses it for in dev:
+# it relays real cameras' RTSP streams to browser-playable HLS for the live
+# view feature (on-demand - only connects to a camera while someone's
+# actually watching). Not available via apt on Ubuntu 22.04, so it's fetched
+# directly from GitHub releases as a static binary.
 #
 # You will be prompted for the domain name (for Nginx + certbot) and whether
 # to run certbot now, unless CCMS_DEPLOY_DOMAIN / CCMS_DEPLOY_RUN_CERTBOT are
@@ -75,6 +79,17 @@ if ! command -v node >/dev/null 2>&1; then
   echo "==> Installing Node.js 20.x (NodeSource)"
   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs
+fi
+
+if ! command -v mediamtx >/dev/null 2>&1; then
+  echo "==> Installing mediamtx (live-view relay, not in apt - fetched from GitHub releases)"
+  MEDIAMTX_VERSION="$(curl -fsSL https://api.github.com/repos/bluenviron/mediamtx/releases/latest | grep -oP '"tag_name":\s*"\K[^"]+')"
+  TMP_TAR="$(mktemp)"
+  curl -fsSL -o "$TMP_TAR" "https://github.com/bluenviron/mediamtx/releases/download/${MEDIAMTX_VERSION}/mediamtx_${MEDIAMTX_VERSION}_linux_amd64.tar.gz"
+  tar -xzf "$TMP_TAR" -C /tmp mediamtx
+  sudo mv /tmp/mediamtx /usr/local/bin/mediamtx
+  sudo chmod +x /usr/local/bin/mediamtx
+  rm -f "$TMP_TAR"
 fi
 
 echo "==> Creating service user '$SERVICE_USER'"
@@ -164,10 +179,13 @@ sudo -u "$SERVICE_USER" bash -c "cd '$APP_DIR' && backend/.venv/bin/python scrip
 echo "==> Building frontend"
 (cd "$APP_DIR/frontend" && sudo -u "$SERVICE_USER" npm ci && sudo -u "$SERVICE_USER" npm run build)
 
+echo "==> Installing mediamtx config"
+sudo -u "$SERVICE_USER" cp "$APP_DIR/deploy/mediamtx.yml" "$APP_DIR/mediamtx.yml"
+
 echo "==> Installing systemd units"
 sudo cp "$APP_DIR"/deploy/systemd/*.service /etc/systemd/system/
 sudo systemctl daemon-reload
-for svc in ccms-api ccms-beat ccms-worker-net ccms-worker-stream ccms-worker-misc; do
+for svc in ccms-api ccms-beat ccms-worker-net ccms-worker-stream ccms-worker-misc ccms-mediamtx; do
   sudo systemctl enable "$svc"
   # restart, not start: `enable --now`/`start` is a no-op on an
   # already-running unit, which silently leaves a redeploy's new code
@@ -176,6 +194,10 @@ for svc in ccms-api ccms-beat ccms-worker-net ccms-worker-stream ccms-worker-mis
   # executing the old buggy version from memory until restarted by hand.
   sudo systemctl restart "$svc"
 done
+
+echo "==> Syncing live-view paths for existing cameras"
+sleep 2  # give mediamtx a moment to finish starting before its API is called
+sudo -u "$SERVICE_USER" bash -c "cd '$APP_DIR' && backend/.venv/bin/python scripts/sync_live_view_paths.py" || true
 
 echo "==> Configuring Nginx"
 sudo bash -c "sed 's/YOUR_DOMAIN/${DOMAIN}/g' '$APP_DIR/deploy/nginx/ccms.conf.template' > /etc/nginx/sites-available/ccms.conf"

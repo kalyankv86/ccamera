@@ -1,0 +1,16 @@
+[Unit]
+Description=CCMS live-view relay (mediamtx: on-demand RTSP -> HLS)
+After=network.target
+
+[Service]
+Type=simple
+User=ccms
+Group=ccms
+WorkingDirectory=/opt/ccms
+ExecStart=/usr/local/bin/mediamtx /opt/ccms/mediamtx.yml
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

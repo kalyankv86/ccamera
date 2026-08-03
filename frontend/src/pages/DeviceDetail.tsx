@@ -5,6 +5,7 @@ import { api } from "../api/client";
 import { pollingInterval } from "../api/ws";
 import { useAuth } from "../state/auth";
 import { useWsStatus } from "../state/wsStatus";
+import { LivePlayer } from "../components/LivePlayer";
 import { StateBadge } from "../components/StateBadge";
 import type { Device, DeviceHistory } from "../api/types";
 
@@ -61,6 +62,13 @@ export function DeviceDetail() {
           <div className="label">Criticality</div>
         </div>
       </div>
+
+      {device.type === "camera" && (
+        <div className="card" style={{ marginBottom: 24 }}>
+          <h3 style={{ marginTop: 0 }}>Live view</h3>
+          <LivePlayer deviceId={deviceId} />
+        </div>
+      )}
 
       {device.type === "camera" && (
         <div className="card" style={{ marginBottom: 24 }}>
